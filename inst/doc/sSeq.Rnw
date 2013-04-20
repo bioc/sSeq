@@ -1,0 +1,202 @@
+\documentclass[a4paper]{article}
+
+\usepackage[a4paper, top=3cm, left=1.7cm, right=1.7cm, bottom=2.5cm]{geometry}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{times}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{natbib}
+\usepackage[pdftitle={Vignette: sSeq},%
+  pdfauthor={Danni Yu},%
+  bookmarks,
+  colorlinks=false,
+  linktoc=section,
+  linkcolor= BlueViolet,%
+  citecolor=BlueViolet,%
+  urlcolor=BlueViolet,%
+  linkbordercolor={.7 .7 .7},
+  citebordercolor={.7 .7 .7},
+  urlbordercolor={.7 .7 .7} ,
+  raiselinks,%
+  plainpages,%
+  pdftex]{hyperref}
+
+
+ \usepackage[utf8]{inputenc}
+ 
+\usepackage{Sweave}  
+\usepackage{color}
+\usepackage{float}
+\hypersetup{
+    colorlinks,
+    linktocpage,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
+
+%%necessary to add the next line with % sign
+%\VignetteIndexEntry{sSeq}
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~% 
+\SweaveOpts{keep.source=TRUE, eps=FALSE, include=FALSE, prefix.string=g}
+ 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~% 
+\title{sSeq: A Simple and Shrinkage Approach of Differential Expression Analysis for RNA-Seq experiments.}
+\author{Danni Yu, Wolfgang Huber and Olga Vitek}
+\date{ \today }
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+\begin{document}
+
+\maketitle
+
+%--------------------------------------------------
+The sSeq package introduced in this manual provides a simple and efficient approach to discover differentially expressed (DE) genes based on the counts of transcripts from RNA-seq experiments. It regularizes the per-gene dispersion estimates with the common information across genes so that the bias and the variability in variance estimation are maintained at the low level.  
+
+%--------------------------------------------------
+\section{Simple comparison between two conditions.}
+In this section, we will use the Hammer {\it et. al.} data \cite{hammer2010mrna} to illustrate how to use the functions in the sSeq package. The two conditions are control Sprague Dawley after 2 months (Condition A) and L5 SNL Sprague Dawley after 2 months (Condition B). There are two samples within each condition. This data is included in the sSeq package as an example, and can be imported as follows. 
+``countsTable'' is a matrix or data frame in which a column represents a sample and a row represents a gene. 
+``conds.Hammer'' is a characteristic vector, and used to define the conditions corresponding to the samples in columns.  After defining the input counts table and the groups for conditions, the function ``nbTestSH'' can be utilized to obtain the regularized dispersion estimates and perform the exact tests. The output is a data frame in which the ``pval" column includes the p-values of the exact tests.
+%----------------
+<<hammer>>=
+library(sSeq);
+data(Hammer2months);
+head(countsTable); 
+conds.Hammer=c("A","A","B","B"); 
+@
+%----------------
+<<res1>>=
+#exact test to get differential expressed genes
+res1 = nbTestSH( countsTable, conds.Hammer, "A", "B");
+@
+<<seeResult>>=
+head(res1);
+@
+
+%----------------%----------------%
+\subsection{ASD plot and Dispersion plot}
+In the sSeq package, the testing is based on the shrinkage estimator $\hat{\phi}^{sSeq}= (1-\delta) \hat{\phi}^{MM} + \delta \xi$ that regularizes the method of moment estimates $\hat{\phi}^{MM}$ to a shrinkage target $\xi$ for the dispersion parameter. The averaged squared difference (ASD) between the method of moment estimates and the shrinkage estimates is used to estimate the shrinkage target. The smallest target value that minimizes the ASD value is selected as the estimate. 
+ 
+If ``plotASD=TRUE'' is specified in the function ``nbTestSH", a plot (Fig.\ref{AvsB_ASDplot}) of ASD values when varying the shrinkage targets is generated. In Fig.\ref{AvsB_ASDplot}, the dotted vertical and horizontal lines represent the estimated shrinkage target $\hat{\xi}$ and the corresponding ASD value. The argument ``SHonly=TRUE" is used to only calculate the dispersion estimates without running the exact tests. 
+%
+<<AvsB_ASDplot, fig=TRUE, cache=FALSE, height=6, width=6>>=
+disp1 <- nbTestSH( countsTable, conds.Hammer, "A", "B", SHonly=TRUE, plotASD=TRUE);
+@
+  \begin{figure}[htbp]
+    \begin{center}
+     \includegraphics[height=0.4\textheight]{g-AvsB_ASDplot}
+     \caption{\label{AvsB_ASDplot} The plot of ASD varying the shrinkage target. The smallest target value that minimizes the ASD value is represented by the vertical dotted line, and the corresponding ASD value is represented by the horizontal dotted line.}
+    \end{center}
+  \end{figure}     
+
+After running the function ``nbTestSH"  with the argument ``SHonly=TRUE'', we obtain an object (named as ``disp1" in the following R scripts) that includes the dispersion estimates and the mean estimates. Using this object, a scatter plot (Fig.\ref{dispPlot}) visualizing the relationship between the dispersion estimates and the mean estimates can be generated with the function ``plot.dispersion''. 
+%----------------
+<<seeResult>>=
+head(disp1);
+@
+<<dispPlot, fig=TRUE, cache=FALSE, height=6, width=6>>=
+plotDispersion(disp1, legPos="bottomright")
+@
+  \begin{figure}[htbp]
+    \begin{center}
+     \includegraphics[height=0.4\textheight, width=0.6\textwidth]{g-dispPlot}
+     \caption{\label{dispPlot} Dispersion plot.}
+    \end{center}
+  \end{figure}    
+%
+Sometimes, a user may like to define the shrinkage target instead of letting the package automatically find an estimate. The sSeq package is flexible for the requirement. For example, the method of moment estimates will be shrunk toward the target 1 when the argument ``shrinkTarget=1'' is added in the function ``nbTestSH''. If the target needs to be defined as a quantile (e.g. 0.975) of the method of moment estimates across genes, then ``shrinkQuantile=0.975'' should be only added in the function ``nbTestSH''. When both the arguments are added, the sSeq package uses the pre-defined target value, not the quantile, and shrinks the method of moment estimates toward the target 1. 
+
+
+%----------------%----------------%
+\subsection{Variance plot}
+To visualize the dependence between the variance estimates and the mean estimates, the following R scripts are used to generate a scatter plot (Fig.\ref{variancePlot}) of log variance estimates versus log mean estimates. The black dots are the variance estimates based on the shrinkage (or regularized) estimates of the dispersion. The blue smooth dots are the variance estimates directly obtained from the samples without any regularization. The  variability among black dots are much lower than the variability among the blue smooth dots. Fig.\ref{variancePlot} clearly indicates that the mean-variance dependence is improved by the regularized variance estimates. 
+%----------------  
+<<variancePlot, fig=TRUE, cache=FALSE, height=6, width=6>>=
+ rV = rowVars(countsTable);
+ mu = rowMeans(countsTable); 
+ SH.var =  (disp1$SH * mu^2 + mu)
+ smoothScatter(log(rV)~log(mu), main="Variance Plot", ylab='log(variance)', 
+   xlab='log(mean)', col=blues9[5], cex.axis=1.8)
+ points( log(SH.var)~log(mu), col="black", pch=16)
+ leg1 =  expression(paste("log(", hat("V")[g]^"sSeq", ")", sep=''));
+ leg2 =  expression(paste("log(", hat("V")[g]^"MM", ")", sep=''));
+ legend("bottomright", legend=c(leg1,leg2), col=c("black",blues9[5]), 
+   pch=c(16, 1), cex=2)
+@
+  \begin{figure}[htbp]
+    \begin{center}
+     \includegraphics[height=0.4\textheight, width=0.6\textwidth]{g-variancePlot}
+     \caption{\label{variancePlot} The plot of the variance estimates and the mean estimates.}
+    \end{center}
+  \end{figure}       
+
+%----------------%----------------%
+\subsection{ECDF plot}
+The empirical cumulative distribution function (ECDF) is an estimator of the true cumulative distribution function (CDF). It asymptotically converges to the true CDF for large number of points. In RNA-seq experiments, we typically have more than 20,000 p-values, and thus the ECDF of the p-values are very close to the true CDF. 
+
+The specificity and the sensitivity can be visualized by drawing the ECDF curves of the p-values for the within-condition comparison and the p-values for the between-condition comparison. When comparing the replicates under the same condition for the specificity, we expect to see that the genes are differentially expressed only by chance. The p-values should follow a uniform distribution (equivalent to the 45 degree line), or most p-values should be large and close to 1. On the other hand, when comparing the samples under two different conditions for the sensitivity, we expect to see that many genes are differentially expressed due to the changes of environment. The p-values should be small and close to 0. When a statistical method is robust for testing, we expect to see that the ECDF curve for the between-condition comparison is toward to the top left corner, and that the ECDF curve for the within-condition comparison is toward to the 45 degree line or the bottom right corner. An example of this ECDF plot is shown in Fig.\ref{ecdf}. ``AvsA" is for the within-condition comparison and ``AvsB" is for the between-condition comparison. 
+ %----------------
+<<ecdf, fig=TRUE, cache=FALSE, height=6, width=6>>=
+#obtain the p-values for the comparison AvsA.
+conds2.Hammer = c("A","B");
+res1.2 =  nbTestSH( countsTable[,1:2], conds2.Hammer, "A", "B");
+#draw the ECDF plot;
+dd = data.frame(AvsA=res1.2$pval, AvsB=res1$pval);
+ecdfAUC(dd, col.line=c("green", "red"), main = "ECDF, Hammer", drawRef = TRUE, rm1=TRUE)
+@
+  \begin{figure}[htbp]
+    \begin{center}
+     \includegraphics[height=0.4\textheight, width=0.7\textwidth]{g-ecdf}
+     \caption{\label{ecdf} The ECDF plot for the profiles of p-values for the comparison between conditions ($AvsB$) and for the comparison within a condition ($AvsA$).}
+    \end{center}
+  \end{figure}    
+
+%----------------%----------------%
+\subsection{MV plot and volcano plot.}
+A MV plot is a scatter plot between the means (M=[$log_2$(A)+$log_2$(B)]/2) and the differences (V=$log_2$(A) - $log_2$(B)). It helps to detect any dependent structures between the means and the differences in condition A and B. In a MV plot, we expect to see that the dots are roughly  distributed on the two sides of the zero horizontal line without any dependent patter between M and V. 
+A volcano plot is a scatter plot that visualizes the linear dependence between the statistical changes (e.g. -$log_2$(p-value)) and the biological changes (e.g. $log_2$(fold change)). We expect to see that the dots are linearly and evenly distributed on the two sides of the zero vertical line. 
+Both types of the plots are useful for visual inspection on the test results among genes. 
+The function `drawMA\_vol' in the sSeq package can be used to draw the MV plot and the volcano plot. An example is shown in Fig.\ref{MAplot}. The red dots are the genes that have p-values less than 0.05. 
+%----------------
+<<MV_volcano, fig=TRUE, height=6, width=6>>=
+drawMA_vol(countsTable, conds.Hammer, res1$pval, cutoff=0.05);
+@
+  \begin{figure}[htbp]
+    \begin{center}
+     \includegraphics[height=0.4\textheight, width=1\textwidth]{g-MV_volcano}
+     \caption{\label{MAplot} MA plot and volcano plot.}
+    \end{center}
+  \end{figure}     
+%--------------------------------------------------
+
+%--------------------------------------------------
+\section{Comparison between two conditions for paired experimental design.}
+The sSeq package is also available to perform exact tests for complex designed experiments, such as paired design. The Tuch {\it et. al.} data \cite{tuch2010tumor} is used as an example. In the experiment, there were three patients who had oral squamous cell carcinoma, which is one of the most common cancers in humans. The paired samples from the tumor tissue and the normal tissue for each patient were collected and sequenced with the RNA-seq technology. This data set is included in the sSeq package and shown as follows. We use ``normal" and ``tumor" to represent the two conditions, and use 1, 2, 3 to represent the three patients. We will simultaneously compare the gene expression between the normal tissue and the tumor tissue within each of the three patients. After specifying the paired samples for each patient by the arguement `coLevels', the exact tests for the paired-design experiment are performed. The counts of the genes that have the 25 smallest p-values are also shown as follows.
+%----------------
+<<pairedDesign_data>>=
+data(Tuch); 
+head(countsTable); 
+conds2 = c("normal", "normal", "normal", "tumor", "tumor", "tumor");
+coLevels=data.frame(subjects=c(1,2,3,1,2,3));
+@
+<<pairedDesign>>=
+res2 = nbTestSH(countsTable, conds2, "normal", "tumor", 
+   coLevels= coLevels, pairedDesign=TRUE, pairedDesign.dispMethod="pooled");
+@
+<<seeResult>>=
+head(res2)
+countsTable[order(res2$pval),][1:25,]
+@
+%----------------
+
+
+
+%------------------------------------------------------------
+\bibliographystyle{plain}
+\bibliography{sSeq}
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~%
+\end{document}
